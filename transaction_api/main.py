@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException
 import sqlite3
 import os
 from datetime import datetime
-from pydantic import BaseModel
 from typing import Literal
 from pydantic import BaseModel, Field
 
@@ -69,7 +68,6 @@ def create_database():
 
 create_database()
 
-transaction_types = ["deposit", "withdraw"]
 app = FastAPI()
 
 def get_user_id(username, last_4_digit_of_CNIC):
@@ -185,14 +183,22 @@ def get_deposits(name: str, last_4_digit_of_CNIC: str):
 
     return deposits
 
-@app.get("/transactions/{name}/withdrawals")
+@app.get("/transactions/{name}/withdrawals",response_model=list[TransactionResponse])
 def get_withdrawals(name: str, last_4_digit_of_CNIC: str):
     name = normalize_user_name(name)
     if not user_exists(name, last_4_digit_of_CNIC):
         raise HTTPException(status_code=404, detail="User not found.")
-    withdrawals = [t for t in get_transactions_from_db(name, last_4_digit_of_CNIC) if t[2] == "withdraw"]
-    return withdrawals
-
+    withdraw=[
+        TransactionResponse(
+            id=row[0],
+            type=row[2],
+            amount=row[3],
+            datetime=row[4]
+        )
+        for row in get_transactions_from_db(name, last_4_digit_of_CNIC)
+        if row[2] == "withdraw"
+    ]
+    return withdraw
 def get_transactions_from_db(user, last_4_digit_of_CNIC):
     user = normalize_user_name(user)
     conn = sqlite3.connect(DB_PATH)
@@ -224,14 +230,14 @@ def register_user(user_registration:UserRegistration):
 def add_transaction(transaction: Transaction):
     username = normalize_user_name(transaction.user)
 
-    if transaction.transaction_type not in transaction_types:
-        raise HTTPException(status_code=400, detail="Invalid transaction type. Must be 'deposit' or 'withdraw'.")
+    # if transaction.transaction_type not in transaction_types:
+    #     raise HTTPException(status_code=400, detail="Invalid transaction type. Must be 'deposit' or 'withdraw'.")
 
     user_id = get_user_id(username, transaction.last_4_digit_of_CNIC)
     if user_id is None:
         raise HTTPException(status_code=404, detail="User not found. Please register first.")
-    if transaction.amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be a positive number.")
+    # if transaction.amount <= 0:
+    #     raise HTTPException(status_code=400, detail="Amount must be a positive number.")
 
     if transaction.transaction_type == "withdraw":
                 balance = get_balance(username, last_4_digit_of_CNIC=transaction.last_4_digit_of_CNIC)["balance"]  # Using the provided last_4_digit_of_CNIC
